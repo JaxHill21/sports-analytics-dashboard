@@ -1,7 +1,6 @@
 import streamlit as st
 import feedparser
 from datetime import datetime
-import time
 import html
 
 # Page configuration
@@ -15,19 +14,17 @@ st.set_page_config(
 # Custom CSS for dark theme styling
 st.markdown("""
 <style>
-    /* Main container styling */
     .main .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
 
-    /* Header styling - more subdued navy blue */
     .dashboard-header {
         background: linear-gradient(90deg, #1a2a4a 0%, #0d1929 100%);
         padding: 0.75rem 1.5rem;
         border-radius: 6px;
         margin-bottom: 1.5rem;
-        border-bottom: 2px solid #CC0000;
+        border-bottom: 2px solid #FF4B4B;
     }
 
     .dashboard-header h1 {
@@ -37,18 +34,17 @@ st.markdown("""
         font-size: 1.5rem;
     }
 
-    /* Card styling */
     .metric-card {
-        background-color: #2B2B2B;
+        background-color: #262730;
         border-radius: 8px;
         padding: 1.25rem;
-        border-left: 4px solid #CC0000;
+        border-left: 4px solid #FF4B4B;
         margin-bottom: 1rem;
         min-height: 120px;
     }
 
     .metric-card h4 {
-        color: #CC0000;
+        color: #FF4B4B;
         margin: 0 0 0.5rem 0;
         font-size: 0.9rem;
         font-weight: 600;
@@ -61,19 +57,17 @@ st.markdown("""
         line-height: 1.4;
     }
 
-    /* News card styling - clickable */
     .news-card {
-        background-color: #1A1A1A;
+        background-color: #1A1A2E;
         border-radius: 6px;
         padding: 1rem;
         margin-bottom: 0.75rem;
-        border-left: 3px solid #CC0000;
+        border-left: 3px solid #FF4B4B;
         transition: all 0.2s ease;
-        cursor: pointer;
     }
 
     .news-card:hover {
-        background-color: #2B2B2B;
+        background-color: #262730;
         transform: translateX(4px);
     }
 
@@ -84,7 +78,7 @@ st.markdown("""
     }
 
     .news-title {
-        color: #FFFFFF;
+        color: #FAFAFA;
         font-weight: 600;
         font-size: 0.95rem;
         margin-bottom: 0.5rem;
@@ -107,11 +101,10 @@ st.markdown("""
     }
 
     .news-source {
-        color: #CC0000;
+        color: #FF4B4B;
         font-weight: 500;
     }
 
-    /* Category tag styling */
     .category-tag {
         display: inline-block;
         background-color: #333333;
@@ -123,23 +116,13 @@ st.markdown("""
         text-transform: uppercase;
     }
 
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #1A1A1A;
-    }
-
-    section[data-testid="stSidebar"] .stRadio label {
-        color: #FFFFFF;
-    }
-
-    /* Section headers */
     .section-header {
-        color: #FFFFFF;
+        color: #FAFAFA;
         font-weight: 600;
         font-size: 1.1rem;
         margin-bottom: 0.5rem;
         padding-bottom: 0.5rem;
-        border-bottom: 2px solid #CC0000;
+        border-bottom: 2px solid #FF4B4B;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -151,9 +134,8 @@ st.markdown("""
         font-weight: 400;
     }
 
-    /* Placeholder styling */
     .placeholder-box {
-        background-color: #2B2B2B;
+        background-color: #262730;
         border: 1px solid #444444;
         border-radius: 8px;
         padding: 1.5rem;
@@ -166,7 +148,7 @@ st.markdown("""
     }
 
     .placeholder-box h3 {
-        color: #FFFFFF;
+        color: #FAFAFA;
         margin: 0 0 0.5rem 0;
         font-size: 1rem;
     }
@@ -175,81 +157,29 @@ st.markdown("""
         margin: 0;
         font-size: 0.85rem;
     }
-
-    /* News feed container */
-    .news-feed-container {
-        max-height: 600px;
-        overflow-y: auto;
-        padding-right: 0.5rem;
-    }
-
-    /* Scrollbar styling */
-    .news-feed-container::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .news-feed-container::-webkit-scrollbar-track {
-        background: #1A1A1A;
-    }
-
-    .news-feed-container::-webkit-scrollbar-thumb {
-        background: #444444;
-        border-radius: 3px;
-    }
-
-    .news-feed-container::-webkit-scrollbar-thumb:hover {
-        background: #555555;
-    }
-
-    /* Filter section styling */
-    .filter-section {
-        margin-bottom: 1rem;
-    }
-
-    .filter-label {
-        color: #AAAAAA;
-        font-size: 0.8rem;
-        margin-bottom: 0.25rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Analytics-focused RSS feeds organized by sport and category
+# Limited RSS feeds for cloud deployment (3 sources)
 ANALYTICS_FEEDS = {
-    "NFL": {
-        "general": [
-            {"url": "https://www.footballoutsiders.com/rss.xml", "source": "Football Outsiders"},
-            {"url": "https://fivethirtyeight.com/tag/nfl/feed/", "source": "FiveThirtyEight NFL"},
-        ],
-        "fangraphs": None,  # FanGraphs is baseball-focused
-    },
-    "NBA": {
-        "general": [
-            {"url": "https://fivethirtyeight.com/tag/nba/feed/", "source": "FiveThirtyEight NBA"},
-            {"url": "https://cleaningtheglass.com/feed/", "source": "Cleaning The Glass"},
-        ],
-    },
-    "MLB": {
-        "general": [
-            {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
-            {"url": "https://fivethirtyeight.com/tag/mlb/feed/", "source": "FiveThirtyEight MLB"},
-        ],
-    },
-    "College Football": {
-        "general": [
-            {"url": "https://fivethirtyeight.com/tag/college-football/feed/", "source": "FiveThirtyEight CFB"},
-            {"url": "https://www.footballoutsiders.com/rss.xml", "source": "Football Outsiders"},
-        ],
-    },
-    "College Basketball": {
-        "general": [
-            {"url": "https://fivethirtyeight.com/tag/college-basketball/feed/", "source": "FiveThirtyEight CBB"},
-            {"url": "https://kenpom.com/blog/feed/", "source": "KenPom Blog"},
-        ],
-    },
+    "MLB": [
+        {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
+    ],
+    "NFL": [
+        {"url": "https://www.espn.com/espn/rss/nfl/news", "source": "ESPN NFL"},
+    ],
+    "NBA": [
+        {"url": "https://www.espn.com/espn/rss/nba/news", "source": "ESPN NBA"},
+    ],
+    "College Football": [
+        {"url": "https://www.espn.com/espn/rss/ncf/news", "source": "ESPN CFB"},
+    ],
+    "College Basketball": [
+        {"url": "https://www.espn.com/espn/rss/ncb/news", "source": "ESPN CBB"},
+    ],
 }
 
-# Analytics focus area categories and keywords for filtering
+# Analytics focus area categories
 FOCUS_AREAS = {
     "All Topics": [],
     "Recruiting & Roster": ["recruit", "roster", "draft", "transfer", "portal", "prospect", "signing"],
@@ -259,126 +189,116 @@ FOCUS_AREAS = {
     "Technology & Tools": ["tracking", "wearable", "AI", "machine learning", "model", "algorithm", "technology", "data"],
 }
 
-# Initialize session state
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = datetime.now()
-if "feed_cache" not in st.session_state:
-    st.session_state.feed_cache = {}
-if "section_timestamps" not in st.session_state:
-    st.session_state.section_timestamps = {}
 
-
-def fetch_rss_feed(url: str, source: str, limit: int = 15) -> list:
-    """Fetch and parse RSS feed, returning list of news items with source."""
-    cache_key = f"{url}_{source}"
-
-    # Check cache (5 minute expiry)
-    if cache_key in st.session_state.feed_cache:
-        cached_time, cached_data = st.session_state.feed_cache[cache_key]
-        if (datetime.now() - cached_time).total_seconds() < 300:
-            return cached_data
-
+@st.cache_data(ttl=600)
+def fetch_rss_feed(url: str, source: str, limit: int = 10) -> list:
+    """Fetch and parse RSS feed with caching and error handling."""
     try:
         feed = feedparser.parse(url)
+
+        if feed.bozo and not feed.entries:
+            return []
+
         items = []
         for entry in feed.entries[:limit]:
-            # Clean and truncate summary
-            summary = entry.get("summary", "") or entry.get("description", "")
-            # Remove HTML tags
-            summary = html.unescape(summary)
-            summary = summary.replace("<p>", "").replace("</p>", " ")
-            summary = summary.replace("<br>", " ").replace("<br/>", " ")
-            # Take first ~200 chars for 2-sentence summary
-            if len(summary) > 200:
-                summary = summary[:200].rsplit(" ", 1)[0] + "..."
+            try:
+                summary = entry.get("summary", "") or entry.get("description", "")
+                summary = html.unescape(str(summary))
+                summary = summary.replace("<p>", "").replace("</p>", " ")
+                summary = summary.replace("<br>", " ").replace("<br/>", " ")
 
-            items.append({
-                "title": entry.get("title", "No title"),
-                "link": entry.get("link", "#"),
-                "published": entry.get("published", ""),
-                "summary": summary,
-                "source": source,
-            })
+                if len(summary) > 200:
+                    summary = summary[:200].rsplit(" ", 1)[0] + "..."
 
-        # Cache the results
-        st.session_state.feed_cache[cache_key] = (datetime.now(), items)
+                items.append({
+                    "title": str(entry.get("title", "No title")),
+                    "link": str(entry.get("link", "#")),
+                    "published": str(entry.get("published", "")),
+                    "summary": summary,
+                    "source": source,
+                })
+            except Exception:
+                continue
+
         return items
     except Exception:
         return []
 
 
 def categorize_article(title: str, summary: str) -> str:
-    """Categorize an article based on keywords in title and summary."""
-    text = (title + " " + summary).lower()
+    """Categorize an article based on keywords."""
+    try:
+        text = (str(title) + " " + str(summary)).lower()
 
-    category_scores = {
-        "Recruiting Analytics": ["recruit", "draft", "prospect", "transfer", "portal", "signing", "commit"],
-        "Performance Metrics": ["metric", "stat", "EPA", "CPOE", "WAR", "efficiency", "rating", "advanced", "expected"],
-        "Coaching Analytics": ["coach", "strategy", "scheme", "decision", "fourth down", "play-call", "game plan"],
-        "Roster Optimization": ["roster", "lineup", "rotation", "depth", "minutes", "snap", "usage"],
-        "Salary Cap/NIL": ["salary", "cap", "contract", "NIL", "money", "deal", "extension"],
-    }
+        category_scores = {
+            "Recruiting Analytics": ["recruit", "draft", "prospect", "transfer", "portal", "signing", "commit"],
+            "Performance Metrics": ["metric", "stat", "EPA", "CPOE", "WAR", "efficiency", "rating", "advanced", "expected"],
+            "Coaching Analytics": ["coach", "strategy", "scheme", "decision", "fourth down", "play-call", "game plan"],
+            "Roster Optimization": ["roster", "lineup", "rotation", "depth", "minutes", "snap", "usage"],
+            "Salary Cap/NIL": ["salary", "cap", "contract", "NIL", "money", "deal", "extension"],
+        }
 
-    best_category = "Performance Metrics"  # Default
-    best_score = 0
+        best_category = "Performance Metrics"
+        best_score = 0
 
-    for category, keywords in category_scores.items():
-        score = sum(1 for kw in keywords if kw.lower() in text)
-        if score > best_score:
-            best_score = score
-            best_category = category
+        for category, keywords in category_scores.items():
+            score = sum(1 for kw in keywords if kw.lower() in text)
+            if score > best_score:
+                best_score = score
+                best_category = category
 
-    return best_category
+        return best_category
+    except Exception:
+        return "Performance Metrics"
 
 
 def filter_by_focus_area(items: list, focus_area: str) -> list:
     """Filter news items by analytics focus area."""
-    if focus_area == "All Topics":
+    try:
+        if focus_area == "All Topics":
+            return items
+
+        keywords = FOCUS_AREAS.get(focus_area, [])
+        if not keywords:
+            return items
+
+        filtered = []
+        for item in items:
+            text = (str(item.get("title", "")) + " " + str(item.get("summary", ""))).lower()
+            if any(kw.lower() in text for kw in keywords):
+                filtered.append(item)
+
+        return filtered if filtered else items[:5]
+    except Exception:
         return items
-
-    keywords = FOCUS_AREAS.get(focus_area, [])
-    if not keywords:
-        return items
-
-    filtered = []
-    for item in items:
-        text = (item["title"] + " " + item["summary"]).lower()
-        if any(kw.lower() in text for kw in keywords):
-            filtered.append(item)
-
-    return filtered if filtered else items[:5]  # Return at least some items
 
 
 def render_news_card(item: dict, show_category: bool = True):
     """Render a clickable news card with source attribution."""
-    category = categorize_article(item["title"], item["summary"])
-    category_html = f'<span class="category-tag">{category}</span>' if show_category else ""
+    try:
+        category = categorize_article(item.get("title", ""), item.get("summary", ""))
+        category_html = f'<span class="category-tag">{category}</span>' if show_category else ""
 
-    st.markdown(f"""
-    <div class="news-card">
-        <a href="{item['link']}" target="_blank" rel="noopener noreferrer">
-            {category_html}
-            <div class="news-title">{item['title']}</div>
-            <div class="news-summary">{item['summary']}</div>
-            <div class="news-meta">
-                <span class="news-source">{item['source']}</span>
-                <span>{item['published']}</span>
-            </div>
-        </a>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def get_section_timestamp(section_name: str) -> str:
-    """Get or create timestamp for a section."""
-    if section_name not in st.session_state.section_timestamps:
-        st.session_state.section_timestamps[section_name] = datetime.now()
-    return st.session_state.section_timestamps[section_name].strftime("%I:%M %p")
+        st.markdown(f"""
+        <div class="news-card">
+            <a href="{item.get('link', '#')}" target="_blank" rel="noopener noreferrer">
+                {category_html}
+                <div class="news-title">{item.get('title', 'No title')}</div>
+                <div class="news-summary">{item.get('summary', '')}</div>
+                <div class="news-meta">
+                    <span class="news-source">{item.get('source', 'Unknown')}</span>
+                    <span>{item.get('published', '')}</span>
+                </div>
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+    except Exception:
+        pass
 
 
-def render_section_header(title: str, section_key: str):
+def render_section_header(title: str):
     """Render a section header with timestamp."""
-    timestamp = get_section_timestamp(section_key)
+    timestamp = datetime.now().strftime("%I:%M %p")
     st.markdown(f"""
     <div class="section-header">
         <span>{title}</span>
@@ -411,19 +331,13 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Refresh controls
-    st.markdown("### Settings")
-    auto_refresh = st.toggle("Auto-refresh (5 min)", value=True)
-
-    if st.button("Refresh Now", use_container_width=True):
-        st.session_state.last_refresh = datetime.now()
-        st.session_state.feed_cache = {}
-        st.session_state.section_timestamps = {}
+    if st.button("Refresh Data", use_container_width=True):
+        st.cache_data.clear()
         st.rerun()
 
     st.markdown("---")
-    st.markdown(f"**Last updated:**")
-    st.markdown(f"{st.session_state.last_refresh.strftime('%I:%M:%S %p')}")
+    st.markdown(f"**Last loaded:**")
+    st.markdown(f"{datetime.now().strftime('%I:%M:%S %p')}")
 
 
 # Main content area
@@ -434,59 +348,44 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Analytics News Feed Section
-render_section_header(f"Analytics News Feed - {selected_sport}", "news_feed")
+render_section_header(f"Analytics News Feed - {selected_sport}")
 
-# Fetch news from all sources for selected sport
+# Fetch news from sources for selected sport
 all_news = []
-sport_feeds = ANALYTICS_FEEDS.get(selected_sport, {}).get("general", [])
+sport_feeds = ANALYTICS_FEEDS.get(selected_sport, [])
 
 with st.spinner(f"Loading {selected_sport} analytics news..."):
     for feed_info in sport_feeds:
-        items = fetch_rss_feed(feed_info["url"], feed_info["source"])
-        all_news.extend(items)
+        try:
+            items = fetch_rss_feed(feed_info["url"], feed_info["source"])
+            all_news.extend(items)
+        except Exception:
+            continue
 
 # Filter by focus area
 filtered_news = filter_by_focus_area(all_news, focus_area)
 
-# Sort by date (most recent first) and deduplicate by title
+# Deduplicate by title
 seen_titles = set()
 unique_news = []
 for item in filtered_news:
-    if item["title"] not in seen_titles:
-        seen_titles.add(item["title"])
+    title = item.get("title", "")
+    if title and title not in seen_titles:
+        seen_titles.add(title)
         unique_news.append(item)
 
 if unique_news:
-    # Group by category
-    categories = {}
-    for item in unique_news:
-        cat = categorize_article(item["title"], item["summary"])
-        if cat not in categories:
-            categories[cat] = []
-        categories[cat].append(item)
-
-    # Display in tabs by category
-    if len(categories) > 1:
-        tabs = st.tabs(list(categories.keys()))
-        for tab, (cat_name, cat_items) in zip(tabs, categories.items()):
-            with tab:
-                st.markdown('<div class="news-feed-container">', unsafe_allow_html=True)
-                for item in cat_items[:8]:
-                    render_news_card(item, show_category=False)
-                st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        # Single category or no categorization
-        col1, col2 = st.columns(2)
-        for i, item in enumerate(unique_news[:10]):
-            with col1 if i % 2 == 0 else col2:
-                render_news_card(item)
+    col1, col2 = st.columns(2)
+    for i, item in enumerate(unique_news[:10]):
+        with col1 if i % 2 == 0 else col2:
+            render_news_card(item)
 else:
     st.info("No analytics news available for the selected filters. Try selecting 'All Topics' or a different sport.")
 
 st.markdown("---")
 
 # Industry Trends Section
-render_section_header("Industry Trends", "industry_trends")
+render_section_header("Industry Trends")
 
 trend_cols = st.columns(4)
 
@@ -525,7 +424,7 @@ with trend_cols[3]:
 st.markdown("---")
 
 # Deep Dives Section
-render_section_header("Deep Dives", "deep_dives")
+render_section_header("Deep Dives")
 
 dive_col1, dive_col2 = st.columns(2)
 
@@ -544,18 +443,3 @@ with dive_col2:
         <p>Successful analytics implementations: how teams leveraged data to gain competitive advantages and transform their organizations</p>
     </div>
     """, unsafe_allow_html=True)
-
-# Auto-refresh logic (5 minutes = 300 seconds)
-if auto_refresh:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh).total_seconds()
-    if time_since_refresh >= 300:
-        st.session_state.last_refresh = datetime.now()
-        st.session_state.feed_cache = {}
-        st.session_state.section_timestamps = {}
-        st.rerun()
-    else:
-        remaining = int(300 - time_since_refresh)
-        mins, secs = divmod(remaining, 60)
-        st.sidebar.markdown(f"**Next refresh:** {mins}m {secs}s")
-        time.sleep(1)
-        st.rerun()
