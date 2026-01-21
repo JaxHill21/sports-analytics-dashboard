@@ -160,24 +160,37 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Limited RSS feeds for cloud deployment (3 sources)
+# Analytics-focused RSS feeds (verified working)
 ANALYTICS_FEEDS = {
     "MLB": [
         {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
+        {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
     ],
     "NFL": [
+        {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
+        {"url": "https://www.sharpfootballanalysis.com/feed/", "source": "Sharp Football"},
         {"url": "https://www.espn.com/espn/rss/nfl/news", "source": "ESPN NFL"},
     ],
     "NBA": [
+        {"url": "https://dunksandthrees.com/feed", "source": "Dunks & Threes"},
         {"url": "https://www.espn.com/espn/rss/nba/news", "source": "ESPN NBA"},
     ],
     "College Football": [
+        {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
         {"url": "https://www.espn.com/espn/rss/ncf/news", "source": "ESPN CFB"},
     ],
     "College Basketball": [
+        {"url": "https://kenpom.com/blog/feed/", "source": "KenPom"},
         {"url": "https://www.espn.com/espn/rss/ncb/news", "source": "ESPN CBB"},
     ],
 }
+
+# Feature/Deep Dive feeds for longer-form analytics content
+DEEP_DIVE_FEEDS = [
+    {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs Features"},
+    {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
+    {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
+]
 
 # Analytics focus area categories
 FOCUS_AREAS = {
@@ -423,23 +436,44 @@ with trend_cols[3]:
 
 st.markdown("---")
 
-# Deep Dives Section
+# Deep Dives Section - Feature articles from analytics sources
 render_section_header("Deep Dives")
+
+# Fetch feature content from deep dive feeds
+deep_dive_news = []
+with st.spinner("Loading feature articles..."):
+    for feed_info in DEEP_DIVE_FEEDS:
+        try:
+            items = fetch_rss_feed(feed_info["url"], feed_info["source"], limit=5)
+            deep_dive_news.extend(items)
+        except Exception:
+            continue
+
+# Filter for longer/feature content (longer summaries suggest deeper pieces)
+feature_articles = [item for item in deep_dive_news if len(item.get("summary", "")) > 100]
 
 dive_col1, dive_col2 = st.columns(2)
 
 with dive_col1:
-    st.markdown("""
-    <div class="placeholder-box">
-        <h3>Analytics-Driven Decisions</h3>
-        <p>Recent team moves explained through analytics: trades, draft picks, free agent signings, and strategic pivots backed by data</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("#### Analytics-Driven Decisions")
+    if feature_articles:
+        for item in feature_articles[:3]:
+            render_news_card(item, show_category=True)
+    else:
+        st.markdown("""
+        <div class="placeholder-box">
+            <p>Loading feature content...</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 with dive_col2:
-    st.markdown("""
-    <div class="placeholder-box">
-        <h3>Case Studies</h3>
-        <p>Successful analytics implementations: how teams leveraged data to gain competitive advantages and transform their organizations</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("#### Latest Analytics Features")
+    if len(feature_articles) > 3:
+        for item in feature_articles[3:6]:
+            render_news_card(item, show_category=True)
+    else:
+        st.markdown("""
+        <div class="placeholder-box">
+            <p>Loading feature content...</p>
+        </div>
+        """, unsafe_allow_html=True)
