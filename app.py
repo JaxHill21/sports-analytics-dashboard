@@ -99,11 +99,29 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
     }
 
     .news-source {
         color: #FF4B4B;
         font-weight: 500;
+    }
+
+    .news-date {
+        color: #888888;
+    }
+
+    .recent-badge {
+        display: inline-block;
+        background-color: #FF4B4B;
+        color: white;
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-left: 0.5rem;
     }
 
     .category-tag {
@@ -158,10 +176,21 @@ st.markdown("""
         margin: 0;
         font-size: 0.85rem;
     }
+
+    .no-content-msg {
+        background-color: #262730;
+        border-radius: 6px;
+        padding: 1rem;
+        color: #888888;
+        text-align: center;
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Analytics-focused RSS feeds (verified working)
+# =============================================================================
+# SPORT-SPECIFIC FEED MAPPING (Explicit - no cross-sport contamination)
+# =============================================================================
 ANALYTICS_FEEDS = {
     "MLB": [
         {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
@@ -171,36 +200,38 @@ ANALYTICS_FEEDS = {
     "NFL": [
         {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
         {"url": "https://www.sharpfootballanalysis.com/feed/", "source": "Sharp Football"},
-        {"url": "https://www.fanduel.com/research/rss/recent", "source": "FanDuel Research"},
     ],
     "NBA": [
         {"url": "https://dunksandthrees.com/feed", "source": "Dunks & Threes"},
-        {"url": "https://www.fanduel.com/research/rss/recent", "source": "FanDuel Research"},
-        {"url": "https://www.espn.com/espn/rss/nba/news", "source": "ESPN NBA"},
     ],
     "College Football": [
         {"url": "https://www.saturdaytradition.com/feed/", "source": "Saturday Tradition"},
-        {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
-        {"url": "https://www.espn.com/espn/rss/ncf/news", "source": "ESPN CFB"},
     ],
     "College Basketball": [
         {"url": "https://kenpom.com/blog/feed/", "source": "KenPom"},
-        {"url": "https://www.espn.com/espn/rss/ncb/news", "source": "ESPN CBB"},
     ],
 }
 
-# Feature/Deep Dive feeds for longer-form analytics content
-DEEP_DIVE_FEEDS = [
-    {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs Features"},
-    {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
-    {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
-    {"url": "https://technology.mlblogs.com/feed", "source": "MLB Tech Blog"},
-]
-
-# Technology & Industry feeds (cross-sport)
-TECH_FEEDS = [
-    {"url": "https://technology.mlblogs.com/feed", "source": "MLB Tech Blog"},
-]
+# Deep Dive feeds mapped by sport (explicit mapping)
+DEEP_DIVE_FEEDS = {
+    "MLB": [
+        {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
+        {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
+    ],
+    "NFL": [
+        {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
+        {"url": "https://www.sharpfootballanalysis.com/feed/", "source": "Sharp Football"},
+    ],
+    "NBA": [
+        {"url": "https://dunksandthrees.com/feed", "source": "Dunks & Threes"},
+    ],
+    "College Football": [
+        {"url": "https://www.saturdaytradition.com/feed/", "source": "Saturday Tradition"},
+    ],
+    "College Basketball": [
+        {"url": "https://kenpom.com/blog/feed/", "source": "KenPom"},
+    ],
+}
 
 # Analytics focus area categories
 FOCUS_AREAS = {
@@ -212,6 +243,12 @@ FOCUS_AREAS = {
     "Technology & Tools": ["tracking", "wearable", "AI", "machine learning", "model", "algorithm", "technology", "data"],
 }
 
+# =============================================================================
+# DATE FILTERING: Only show articles from last 30 days (after Dec 21, 2025)
+# =============================================================================
+MAX_AGE_DAYS = 30
+RECENT_THRESHOLD_DAYS = 7
+
 
 def parse_date(date_str: str) -> datetime:
     """Parse various date formats from RSS feeds."""
@@ -222,35 +259,73 @@ def parse_date(date_str: str) -> datetime:
     formats = [
         "%a, %d %b %Y %H:%M:%S %z",      # RFC 822
         "%a, %d %b %Y %H:%M:%S %Z",      # RFC 822 with timezone name
+        "%a, %d %b %Y %H:%M:%S GMT",     # RFC 822 GMT
         "%Y-%m-%dT%H:%M:%S%z",           # ISO 8601
         "%Y-%m-%dT%H:%M:%SZ",            # ISO 8601 UTC
+        "%Y-%m-%dT%H:%M:%S.%fZ",         # ISO 8601 with microseconds
         "%Y-%m-%d %H:%M:%S",             # Simple datetime
         "%Y-%m-%d",                       # Simple date
     ]
 
     # Clean up the date string
     date_str = re.sub(r'\s+', ' ', date_str.strip())
+    # Handle +0000 timezone format
+    date_str = re.sub(r'\+0000$', '+00:00', date_str)
 
     for fmt in formats:
         try:
-            return datetime.strptime(date_str, fmt)
+            parsed = datetime.strptime(date_str, fmt)
+            # Make timezone-naive for comparison
+            if parsed.tzinfo:
+                parsed = parsed.replace(tzinfo=None)
+            return parsed
         except ValueError:
             continue
 
-    # If parsing fails, return None (will include the article)
     return None
 
 
+def format_date_display(pub_date: datetime) -> str:
+    """Format date for display on cards."""
+    if not pub_date:
+        return "Unknown date"
+
+    now = datetime.now()
+    diff = now - pub_date
+
+    if diff.days == 0:
+        hours = diff.seconds // 3600
+        if hours == 0:
+            return "Just now"
+        elif hours == 1:
+            return "1 hour ago"
+        else:
+            return f"{hours} hours ago"
+    elif diff.days == 1:
+        return "Yesterday"
+    elif diff.days < 7:
+        return f"{diff.days} days ago"
+    else:
+        return pub_date.strftime("%b %d, %Y")
+
+
+def is_recent(pub_date: datetime) -> bool:
+    """Check if article is less than 7 days old."""
+    if not pub_date:
+        return False
+    return (datetime.now() - pub_date).days < RECENT_THRESHOLD_DAYS
+
+
 @st.cache_data(ttl=600)
-def fetch_rss_feed(url: str, source: str, limit: int = 15, max_age_days: int = 60) -> list:
-    """Fetch and parse RSS feed with caching, error handling, and date filtering."""
+def fetch_rss_feed(url: str, source: str, limit: int = 15) -> list:
+    """Fetch and parse RSS feed with caching, error handling, and 30-day filtering."""
     try:
         feed = feedparser.parse(url)
 
         if feed.bozo and not feed.entries:
             return []
 
-        cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        cutoff_date = datetime.now() - timedelta(days=MAX_AGE_DAYS)
         items = []
 
         for entry in feed.entries:
@@ -258,17 +333,17 @@ def fetch_rss_feed(url: str, source: str, limit: int = 15, max_age_days: int = 6
                 break
 
             try:
-                # Parse and filter by date
+                # Parse publication date
                 pub_date_str = entry.get("published", "") or entry.get("updated", "")
                 pub_date = parse_date(pub_date_str)
 
-                # Skip articles older than max_age_days (if we can parse the date)
-                if pub_date:
-                    # Make both datetimes naive for comparison
-                    if pub_date.tzinfo:
-                        pub_date = pub_date.replace(tzinfo=None)
-                    if pub_date < cutoff_date:
-                        continue
+                # CRITICAL: Skip articles older than 30 days
+                if pub_date and pub_date < cutoff_date:
+                    continue
+
+                # If we can't parse the date, skip the article (be strict)
+                if not pub_date:
+                    continue
 
                 summary = entry.get("summary", "") or entry.get("description", "")
                 summary = html.unescape(str(summary))
@@ -284,6 +359,8 @@ def fetch_rss_feed(url: str, source: str, limit: int = 15, max_age_days: int = 6
                     "link": str(entry.get("link", "#")),
                     "published": pub_date_str,
                     "pub_date": pub_date,
+                    "date_display": format_date_display(pub_date),
+                    "is_recent": is_recent(pub_date),
                     "summary": summary,
                     "source": source,
                 })
@@ -347,20 +424,25 @@ def filter_by_focus_area(items: list, focus_area: str) -> list:
 
 
 def render_news_card(item: dict, show_category: bool = True):
-    """Render a clickable news card with source attribution."""
+    """Render a clickable news card with source, date, and RECENT badge."""
     try:
         category = categorize_article(item.get("title", ""), item.get("summary", ""))
         category_html = f'<span class="category-tag">{category}</span>' if show_category else ""
+
+        # Add RECENT badge if article is less than 7 days old
+        recent_badge = '<span class="recent-badge">RECENT</span>' if item.get("is_recent") else ""
+
+        date_display = item.get("date_display", "Unknown date")
 
         st.markdown(f"""
         <div class="news-card">
             <a href="{item.get('link', '#')}" target="_blank" rel="noopener noreferrer">
                 {category_html}
-                <div class="news-title">{item.get('title', 'No title')}</div>
+                <div class="news-title">{item.get('title', 'No title')}{recent_badge}</div>
                 <div class="news-summary">{item.get('summary', '')}</div>
                 <div class="news-meta">
                     <span class="news-source">{item.get('source', 'Unknown')}</span>
-                    <span>{item.get('published', '')}</span>
+                    <span class="news-date">{date_display}</span>
                 </div>
             </a>
         </div>
@@ -380,7 +462,18 @@ def render_section_header(title: str):
     """, unsafe_allow_html=True)
 
 
-# Sidebar
+def render_no_content_message(source_name: str):
+    """Render message when no recent articles from a source."""
+    st.markdown(f"""
+    <div class="no-content-msg">
+        No recent updates from {source_name} (last 30 days)
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# SIDEBAR
+# =============================================================================
 with st.sidebar:
     st.markdown("## Sports Filter")
     st.markdown("---")
@@ -411,9 +504,13 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**Last loaded:**")
     st.markdown(f"{datetime.now().strftime('%I:%M:%S %p')}")
+    st.markdown("---")
+    st.markdown(f"*Showing articles from last {MAX_AGE_DAYS} days*")
 
 
-# Main content area
+# =============================================================================
+# MAIN CONTENT
+# =============================================================================
 st.markdown("""
 <div class="dashboard-header">
     <h1>Sports Analytics Dashboard</h1>
@@ -423,22 +520,26 @@ st.markdown("""
 # Analytics News Feed Section
 render_section_header(f"Analytics News Feed - {selected_sport}")
 
-# Fetch news from sources for selected sport
+# Fetch news from ONLY the selected sport's feeds (no cross-contamination)
 all_news = []
 sport_feeds = ANALYTICS_FEEDS.get(selected_sport, [])
+sources_with_no_content = []
 
 with st.spinner(f"Loading {selected_sport} analytics news..."):
     for feed_info in sport_feeds:
         try:
             items = fetch_rss_feed(feed_info["url"], feed_info["source"])
-            all_news.extend(items)
+            if items:
+                all_news.extend(items)
+            else:
+                sources_with_no_content.append(feed_info["source"])
         except Exception:
-            continue
+            sources_with_no_content.append(feed_info["source"])
 
 # Filter by focus area
 filtered_news = filter_by_focus_area(all_news, focus_area)
 
-# Deduplicate by title
+# Deduplicate by title and sort by date
 seen_titles = set()
 unique_news = []
 for item in filtered_news:
@@ -447,13 +548,22 @@ for item in filtered_news:
         seen_titles.add(title)
         unique_news.append(item)
 
+# Sort newest first
+unique_news.sort(key=lambda x: x.get("pub_date") or datetime.min, reverse=True)
+
 if unique_news:
     col1, col2 = st.columns(2)
     for i, item in enumerate(unique_news[:10]):
         with col1 if i % 2 == 0 else col2:
             render_news_card(item)
 else:
-    st.info("No analytics news available for the selected filters. Try selecting 'All Topics' or a different sport.")
+    st.info(f"No recent analytics news available for {selected_sport} (last {MAX_AGE_DAYS} days). Try selecting 'All Topics' or check back later.")
+
+# Show sources with no recent content
+if sources_with_no_content:
+    with st.expander("Sources with no recent updates"):
+        for source in sources_with_no_content:
+            st.markdown(f"- {source}")
 
 st.markdown("---")
 
@@ -496,44 +606,58 @@ with trend_cols[3]:
 
 st.markdown("---")
 
-# Deep Dives Section - Feature articles from analytics sources
-render_section_header("Deep Dives")
+# =============================================================================
+# DEEP DIVES SECTION - RESPECTS SPORT FILTER (CRITICAL FIX)
+# =============================================================================
+render_section_header(f"Deep Dives - {selected_sport}")
 
-# Fetch feature content from deep dive feeds
+# Fetch feature content ONLY from the selected sport's feeds
+deep_dive_feeds = DEEP_DIVE_FEEDS.get(selected_sport, [])
 deep_dive_news = []
-with st.spinner("Loading feature articles..."):
-    for feed_info in DEEP_DIVE_FEEDS:
+
+with st.spinner(f"Loading {selected_sport} feature articles..."):
+    for feed_info in deep_dive_feeds:
         try:
-            items = fetch_rss_feed(feed_info["url"], feed_info["source"], limit=5)
+            items = fetch_rss_feed(feed_info["url"], feed_info["source"], limit=8)
             deep_dive_news.extend(items)
         except Exception:
             continue
 
-# Filter for longer/feature content (longer summaries suggest deeper pieces)
-feature_articles = [item for item in deep_dive_news if len(item.get("summary", "")) > 100]
+# Filter for longer/feature content and sort by date
+feature_articles = [item for item in deep_dive_news if len(item.get("summary", "")) > 80]
+feature_articles.sort(key=lambda x: x.get("pub_date") or datetime.min, reverse=True)
+
+# Deduplicate
+seen_feature_titles = set()
+unique_features = []
+for item in feature_articles:
+    title = item.get("title", "")
+    if title and title not in seen_feature_titles:
+        seen_feature_titles.add(title)
+        unique_features.append(item)
 
 dive_col1, dive_col2 = st.columns(2)
 
 with dive_col1:
-    st.markdown("#### Analytics-Driven Decisions")
-    if feature_articles:
-        for item in feature_articles[:3]:
+    st.markdown(f"#### Latest {selected_sport} Analytics")
+    if unique_features:
+        for item in unique_features[:3]:
             render_news_card(item, show_category=True)
     else:
-        st.markdown("""
-        <div class="placeholder-box">
-            <p>Loading feature content...</p>
+        st.markdown(f"""
+        <div class="no-content-msg">
+            No recent feature articles for {selected_sport}
         </div>
         """, unsafe_allow_html=True)
 
 with dive_col2:
-    st.markdown("#### Latest Analytics Features")
-    if len(feature_articles) > 3:
-        for item in feature_articles[3:6]:
+    st.markdown(f"#### More {selected_sport} Features")
+    if len(unique_features) > 3:
+        for item in unique_features[3:6]:
             render_news_card(item, show_category=True)
     else:
-        st.markdown("""
-        <div class="placeholder-box">
-            <p>Loading feature content...</p>
+        st.markdown(f"""
+        <div class="no-content-msg">
+            Check back for more {selected_sport} content
         </div>
         """, unsafe_allow_html=True)
