@@ -1,7 +1,8 @@
 import streamlit as st
 import feedparser
-from datetime import datetime
+from datetime import datetime, timedelta
 import html
+import re
 
 # Page configuration
 st.set_page_config(
@@ -165,17 +166,20 @@ ANALYTICS_FEEDS = {
     "MLB": [
         {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs"},
         {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
+        {"url": "https://technology.mlblogs.com/feed", "source": "MLB Tech Blog"},
     ],
     "NFL": [
         {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
         {"url": "https://www.sharpfootballanalysis.com/feed/", "source": "Sharp Football"},
-        {"url": "https://www.espn.com/espn/rss/nfl/news", "source": "ESPN NFL"},
+        {"url": "https://www.fanduel.com/research/rss/recent", "source": "FanDuel Research"},
     ],
     "NBA": [
         {"url": "https://dunksandthrees.com/feed", "source": "Dunks & Threes"},
+        {"url": "https://www.fanduel.com/research/rss/recent", "source": "FanDuel Research"},
         {"url": "https://www.espn.com/espn/rss/nba/news", "source": "ESPN NBA"},
     ],
     "College Football": [
+        {"url": "https://www.saturdaytradition.com/feed/", "source": "Saturday Tradition"},
         {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
         {"url": "https://www.espn.com/espn/rss/ncf/news", "source": "ESPN CFB"},
     ],
@@ -190,6 +194,12 @@ DEEP_DIVE_FEEDS = [
     {"url": "https://blogs.fangraphs.com/feed/", "source": "FanGraphs Features"},
     {"url": "https://www.baseballprospectus.com/feed/", "source": "Baseball Prospectus"},
     {"url": "https://www.the33rdteam.com/feed/", "source": "The 33rd Team"},
+    {"url": "https://technology.mlblogs.com/feed", "source": "MLB Tech Blog"},
+]
+
+# Technology & Industry feeds (cross-sport)
+TECH_FEEDS = [
+    {"url": "https://technology.mlblogs.com/feed", "source": "MLB Tech Blog"},
 ]
 
 # Analytics focus area categories
@@ -203,22 +213,68 @@ FOCUS_AREAS = {
 }
 
 
+def parse_date(date_str: str) -> datetime:
+    """Parse various date formats from RSS feeds."""
+    if not date_str:
+        return None
+
+    # Common RSS date formats
+    formats = [
+        "%a, %d %b %Y %H:%M:%S %z",      # RFC 822
+        "%a, %d %b %Y %H:%M:%S %Z",      # RFC 822 with timezone name
+        "%Y-%m-%dT%H:%M:%S%z",           # ISO 8601
+        "%Y-%m-%dT%H:%M:%SZ",            # ISO 8601 UTC
+        "%Y-%m-%d %H:%M:%S",             # Simple datetime
+        "%Y-%m-%d",                       # Simple date
+    ]
+
+    # Clean up the date string
+    date_str = re.sub(r'\s+', ' ', date_str.strip())
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    # If parsing fails, return None (will include the article)
+    return None
+
+
 @st.cache_data(ttl=600)
-def fetch_rss_feed(url: str, source: str, limit: int = 10) -> list:
-    """Fetch and parse RSS feed with caching and error handling."""
+def fetch_rss_feed(url: str, source: str, limit: int = 15, max_age_days: int = 60) -> list:
+    """Fetch and parse RSS feed with caching, error handling, and date filtering."""
     try:
         feed = feedparser.parse(url)
 
         if feed.bozo and not feed.entries:
             return []
 
+        cutoff_date = datetime.now() - timedelta(days=max_age_days)
         items = []
-        for entry in feed.entries[:limit]:
+
+        for entry in feed.entries:
+            if len(items) >= limit:
+                break
+
             try:
+                # Parse and filter by date
+                pub_date_str = entry.get("published", "") or entry.get("updated", "")
+                pub_date = parse_date(pub_date_str)
+
+                # Skip articles older than max_age_days (if we can parse the date)
+                if pub_date:
+                    # Make both datetimes naive for comparison
+                    if pub_date.tzinfo:
+                        pub_date = pub_date.replace(tzinfo=None)
+                    if pub_date < cutoff_date:
+                        continue
+
                 summary = entry.get("summary", "") or entry.get("description", "")
                 summary = html.unescape(str(summary))
-                summary = summary.replace("<p>", "").replace("</p>", " ")
-                summary = summary.replace("<br>", " ").replace("<br/>", " ")
+                # Remove HTML tags
+                summary = re.sub(r'<[^>]+>', ' ', summary)
+                summary = re.sub(r'\s+', ' ', summary).strip()
 
                 if len(summary) > 200:
                     summary = summary[:200].rsplit(" ", 1)[0] + "..."
@@ -226,12 +282,16 @@ def fetch_rss_feed(url: str, source: str, limit: int = 10) -> list:
                 items.append({
                     "title": str(entry.get("title", "No title")),
                     "link": str(entry.get("link", "#")),
-                    "published": str(entry.get("published", "")),
+                    "published": pub_date_str,
+                    "pub_date": pub_date,
                     "summary": summary,
                     "source": source,
                 })
             except Exception:
                 continue
+
+        # Sort by date (newest first)
+        items.sort(key=lambda x: x.get("pub_date") or datetime.min, reverse=True)
 
         return items
     except Exception:
